@@ -1,0 +1,20 @@
+# Start from a Debian image with the latest version of Go installed
+# and a workspace (GOPATH) configured at /go.
+FROM golang
+
+# Mainteners.
+MAINTAINER Clement Flodrops<clement.flodrops@gmail.com>
+
+# Add project sources.
+ADD . /go/src/lazycoding.io/iot-server
+
+# Build inside the container.
+# (You may fetch or manage dependencies here,
+# either manually or with a tool like "godep".)
+RUN go install lazycoding.io/iot-server
+
+# Run the command by default when the container starts.
+ENTRYPOINT /go/bin/iot-server
+
+# Document that the service listens on port 80.
+EXPOSE 80

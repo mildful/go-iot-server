@@ -1,16 +1,22 @@
 package main
 
 import (
-  "fmt"
+  "log"
+
   "os"
   "os/signal"
+  "strconv"
 
   "github.com/yosssi/gmq/mqtt"
-  "github.com/yosssi/gmq/mqtt/client"
+  MqttClient "github.com/yosssi/gmq/mqtt/client"
+  InfluxClient "github.com/influxdata/influxdb/client/v2"
 )
 
-func handler(topic, message []byte) {
-  fmt.Println(string(message))
+func handler(influxClient InfluxClient.Client, temp float64) {
+  err := writePoint(influxClient, temp)
+  if err != nil {
+    panic(err)
+  }
 }
 
 func main() {
@@ -18,64 +24,44 @@ func main() {
   sigc := make(chan os.Signal, 1)
   signal.Notify(sigc, os.Interrupt, os.Kill)
 
-  // Create an MQTT Client.
-  cli := client.New(&client.Options{
-    // Define the processing of the error handler.
-    ErrorHandler: func(err error) {
-      fmt.Println(err)
-    },
-  })
-
-  // Terminate the cliebt.
-  defer cli.Terminate()
-
-  // Connect toe the MQTT server.
-  err := cli.Connect(&client.ConnectOptions{
-    Network: "tcp",
-    Address: "0.0.0.0:1883",
-    ClientID: []byte("example"),
-  })
+  // Influx
+  influxClient, err := getInfluxClient()
   if err != nil {
-    panic(err)
+    log.Fatalln("Error : ", err)
   }
+  // MQTT
+  mqttClient, err := getMQTTClient()
+  if err != nil {
+    log.Fatalln("Error : ", err)
+  }
+  defer mqttClient.Terminate()
 
   // Subscribe to topics.
-  err = cli.Subscribe(&client.SubscribeOptions{
-    SubReqs: []*client.SubReq{
-      &client.SubReq{
-        TopicFilter:  []byte("temp"),
+  err = mqttClient.Subscribe(&MqttClient.SubscribeOptions{
+    SubReqs: []*MqttClient.SubReq{
+      &MqttClient.SubReq{
+        TopicFilter:  []byte("temperature"),
         QoS:          mqtt.QoS0,
-        Handler:      handler,
+        Handler: func (topic, message []byte) {
+          i, err := strconv.ParseFloat(string(message), 64)
+          if err != nil {
+            panic(err)
+          }
+          handler(influxClient, i)
+        },
       },
     },
   })
   if err != nil {
-    panic(err)
+    log.Fatalln("Error : ", err)
   }
-  /*err = cli.Publish(&client.PublishOptions{
-        QoS:       mqtt.QoS0,
-        TopicName: []byte("temp"),
-        Message:   []byte("11"),
-    })
-    if err != nil {
-        panic(err)
-    }*/
 
-  // Unsubscribe from topics.
-  /*err = cli.Unsubscribe(&client.UnsubscribeOptions{
-    TopicFilters: [][]byte{
-      []byte("temp"),
-    },
-  })
-  if err != nil {
-    panic(err)
-  }*/
 
   // Wait for receiving a signal.
   <-sigc
 
   // Disconnect the Network Connection.
-  if err := cli.Disconnect(); err != nil {
+  if err := mqttClient.Disconnect(); err != nil {
     panic(err)
   }
 }

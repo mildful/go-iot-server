@@ -43,7 +43,8 @@ func main() {
         TopicFilter:  []byte("temperature"),
         QoS:          mqtt.QoS0,
         Handler: func (topic, message []byte) {
-          i, err := strconv.ParseFloat(string(message), 64)
+          floatString := string(message)[:len(message) - 4]
+          i, err := strconv.ParseFloat(string(floatString), 64)
           if err != nil {
             panic(err)
           }
